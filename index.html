@@ -141,6 +141,7 @@
                     <option value="ITI">ITI</option>
                     <option value="Diploma">Diploma</option>
                 </select>
+                <p class="mt-1 text-[11px] text-sky-300">Image upload par ITI / Diploma automatically detect hoga. Aap manually bhi select kar sakte hain.</p>
             </div>
 
             <div id="itiFields" class="flex flex-col gap-3">
@@ -671,95 +672,194 @@
             else ocrStatus.textContent = 'Image file yahan drop karein.';
         });
 
-        function processImage(file) {
+        // Tesseract v5 recognizes text by default; request TSV explicitly for accurate table columns.
+        function parseOcrTsv(tsv) {
+            if (typeof tsv !== 'string') return [];
+            return tsv.split(/\r?\n/).slice(1).flatMap(row => {
+                const cells = row.split('\t');
+                if (cells.length < 12 || cells[0] !== '5') return [];
+                const [left, top, width, height, confidence] = [6, 7, 8, 9, 10].map(index => Number(cells[index]));
+                const value = cells.slice(11).join('\t').trim();
+                if (!value || ![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return [];
+                return [{
+                    text: value, confidence,
+                    bbox: { x0: left, y0: top, x1: left + width, y1: top + height },
+                    order: [1, 2, 3, 4, 5].map(index => Number(cells[index]) || 0)
+                }];
+            });
+        }
+
+        function detectResultType(text, words = []) {
+            const source = `${text || ''} ${words.map(word => word.text || '').join(' ')}`.toLowerCase();
+            const diplomaIndicators = [
+                /\bpnr[_\s-]*no\b/, /\bcertificate\s*(?:no|number)\b/,
+                /\bfirst\s+year\s+marks?\b/, /\bsecond\s+year\s+marks?\b/,
+                /\bthird\s+year\s+marks?\b/, /\bdiploma\s+in\b/
+            ];
+            const diplomaCount = diplomaIndicators.filter(pattern => pattern.test(source)).length;
+            if (diplomaCount >= 2 || (diplomaCount >= 1 && /\bcertificate\b/.test(source) && /\bresult\b/.test(source))) {
+                return 'Diploma';
+            }
+            const itiCount = [
+                /\bpractical\s*(?:marks)?\b/, /\btheory\s*(?:marks)?\b/,
+                /\bworkshop\s*(?:calculation|calc)/, /\bengineering\s+drawing\b/,
+                /\bseat\s*(?:no|number)\b/
+            ].filter(pattern => pattern.test(source)).length;
+            return itiCount >= 2 ? 'ITI' : null;
+        }
+
+        async function prepareOcrImage(file) {
+            // Small, pale screenshots otherwise lose characters such as the initial A in PNR.
+            const bitmap = await createImageBitmap(file);
+            try {
+                const scale = bitmap.width < 1800 ? Math.min(2, 2800 / bitmap.width, 2200 / bitmap.height) : 1;
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(bitmap.width * scale);
+                canvas.height = Math.round(bitmap.height * scale);
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                return canvas;
+            } finally {
+                if (bitmap.close) bitmap.close();
+            }
+        }
+
+        let ocrBusy = false;
+        async function processImage(file) {
             if (!file || !file.type.startsWith('image/')) {
                 ocrStatus.textContent = 'Kripya image file select karein.';
                 return;
             }
-            if (!window.Tesseract) {
-                ocrStatus.textContent = 'OCR library load nahi hui. Internet check karke page reload karein.';
+            if (!window.Tesseract || typeof Tesseract.createWorker !== 'function') {
+                ocrStatus.textContent = 'OCR library load nahi hui. Internet check karke reload karein.';
                 return;
             }
-            const diploma = document.getElementById('courseVal').value === 'Diploma';
-            const activeFields = diploma ? DIPLOMA_FIELDS.map(([id]) => id)
-                : ['studentName', 'seatNo', 'dob', 'yearVal', 'trade', 'practical', 'theory', 'wcs', 'ed', 'socialStudy', 'totalMarks'];
-            activeFields.forEach(id => { document.getElementById(id).value = ''; });
-            ocrStatus.textContent = '🔍 Image read ho rahi hai: 0%';
-            Tesseract.recognize(
-                file,
-                'eng',
-                { logger: m => {
-                    if (m.status === 'recognizing text') ocrStatus.textContent = `🔍 Image read ho rahi hai: ${Math.round((m.progress || 0) * 100)}%`;
-                } }
-            ).then(({ data }) => {
-                const result = diploma
-                    ? parseDiplomaText(data.text, data.words || [])
-                    : parseExtractedText(data.text, data.words);
-                const missing = result.missing.length ? ` Missing/check: ${result.missing.join(', ')}.` : '';
-                ocrStatus.textContent = `OCR: ${result.filled} fields filled. Verify every value before using QR.${missing}`;
-            }).catch(err => {
-                ocrStatus.textContent = '❌ Image read nahi hui. Saaf aur seedhi image try karein.';
-                console.error(err);
+            if (ocrBusy) {
+                ocrStatus.textContent = 'Ek image process ho rahi hai. Kripya wait karein.';
+                return;
+            }
+            ocrBusy = true;
+            ocrStatus.textContent = '🔍 OCR shuru ho raha hai...';
+            let worker;
+            try {
+                const prepared = await prepareOcrImage(file);
+                worker = await Tesseract.createWorker('eng', Tesseract.OEM?.DEFAULT ?? 1, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            ocrStatus.textContent = `🔍 OCR chal raha hai: ${Math.round((m.progress || 0) * 100)}%`;
+                        }
+                    }
+                });
+                // Position data is essential for separate table columns and wrapped cells.
+                const { data } = await worker.recognize(prepared, {}, { text: true, tsv: true });
+                const words = parseOcrTsv(data.tsv);
+                const detected = detectResultType(data.text, words);
+                if (detected && detected !== document.getElementById('courseVal').value) {
+                    document.getElementById('courseVal').value = detected;
+                    setCourseMode(detected);
+                }
+                const mode = document.getElementById('courseVal').value;
+                const result = mode === 'Diploma'
+                    ? parseDiplomaText(data.text, words)
+                    : parseExtractedText(data.text, words);
+                const extra = detected ? ` (${detected} auto-detected)` : ` (${mode} selected)`;
+                const missing = result.missing.length ? ` Check missing: ${result.missing.join(', ')}.` : '';
+                const warning = result.warnings?.length ? ` ⚠️ ${result.warnings.join('; ')}.` : '';
+                ocrStatus.textContent = `✅ OCR: ${result.filled} fields recognized${extra}. QR se pehle sabhi values verify karein.${missing}${warning}`;
+            } catch (error) {
+                console.error('OCR failure:', error);
+                ocrStatus.textContent = '❌ OCR failed. Clear screenshot ya dobara upload try karein.';
+            } finally {
+                ocrBusy = false;
+                if (worker) {
+                    try { await worker.terminate(); } catch (error) { console.warn('OCR worker cleanup:', error); }
+                }
+            }
+        }
+
+        function sortColumnWords(words) {
+            // Recognizer's line/word order respects the correct word sequence even
+            // if its bounding boxes have different vertical padding.
+            return words.sort((a, b) => {
+                if (a.order && b.order) {
+                    for (let index = 0; index < 5; index++) {
+                        if (a.order[index] !== b.order[index]) return a.order[index] - b.order[index];
+                    }
+                }
+                return a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0;
             });
+        }
+
+        function cleanDiplomaValue(id, raw) {
+            let value = String(raw || '').replace(/\s+/g, ' ').trim();
+            if (!value) return '';
+            if (['diplomaPnr', 'diplomaCertificate'].includes(id)) {
+                value = value.replace(/\s/g, '').replace(/[^A-Za-z0-9/-]/g, '');
+                return /^[A-Z0-9][A-Z0-9/-]{3,30}$/i.test(value) ? value.toUpperCase() : '';
+            }
+            if (['diplomaFirst', 'diplomaSecond', 'diplomaThird'].includes(id)) {
+                // Keep commas, decimals and parentheses in original marks format.
+                value = value.replace(/\s*([(),])\s*/g, '$1');
+                return /^\d{1,5}\s*\(\d{1,3}(?:\.\d{1,3})?\)(?:,\d{1,5}\s*\(\d{1,3}(?:\.\d{1,3})?\))*$/.test(value) ? value : '';
+            }
+            if (id === 'diplomaResult') {
+                const result = value.match(/^(pass|fail|atkt|absent|withheld|pending)$/i);
+                return result ? result[0].toUpperCase() === 'PASS' ? 'Pass' : result[0].toUpperCase() : '';
+            }
+            if (/^(?:no|name|mark|marks|year|student|course|certificate|result|first|second|third)$/i.test(value)) return '';
+            if (id === 'diplomaName' && /\b(?:course|year|mark|certificate|pnr|result)\b/i.test(value)) return '';
+            if (id === 'diplomaCourse' && !/\b(?:diploma|engineering|technology|polytechnic|electrical|mechanical|civil|computer|electronics)\b/i.test(value)) return '';
+            return value.slice(0, 250);
         }
 
         function parseDiplomaText(text, words = []) {
             const found = {};
-            const usable = (Array.isArray(words) ? words : []).filter(word =>
-                word && word.bbox && Number.isFinite(word.bbox.x0) &&
-                Number.isFinite(word.bbox.y0) && String(word.text || '').trim());
-            const headerSpecs = [
-                ['diplomaPnr', /^(pnr|pnrno)$/i],
-                ['diplomaCertificate', /^certificate$/i],
-                ['diplomaName', /^student$/i],
-                ['diplomaCourse', /^course$/i],
-                ['diplomaFirst', /^first$/i],
-                ['diplomaSecond', /^second$/i],
-                ['diplomaThird', /^third$/i],
-                ['diplomaResult', /^result$/i]
+            const warnings = [];
+            const usable = words.filter(w => w && w.bbox && Number.isFinite(w.bbox.x0) && String(w.text || '').trim());
+            const fields = [
+                ['diplomaPnr', /^(pnr|pnrno)$/i], ['diplomaCertificate', /^certificate$/i],
+                ['diplomaName', /^student$/i], ['diplomaCourse', /^course$/i],
+                ['diplomaFirst', /^first$/i], ['diplomaSecond', /^second$/i],
+                ['diplomaThird', /^third$/i], ['diplomaResult', /^result$/i]
             ];
-            const normalize = word => String(word.text || '').replace(/[^a-z]/gi, '');
-            // The header row must contain at least six unique column labels.
-            const anchors = headerSpecs.map(([id, pattern]) => {
-                const word = usable.find(w => pattern.test(normalize(w)));
-                return word ? { id, x: (word.bbox.x0 + word.bbox.x1) / 2, top: word.bbox.y0, bottom: word.bbox.y1 } : null;
+            const normalize = item => String(item.text || '').replace(/[^a-z]/gi, '').toLowerCase();
+            const headerCandidates = fields.map(([id, pattern]) => {
+                const matches = usable.filter(w => pattern.test(normalize(w)));
+                const match = matches.sort((a, b) => a.bbox.y0 - b.bbox.y0)[0];
+                return match ? { id, x: (match.bbox.x0 + match.bbox.x1) / 2, top: match.bbox.y0, bottom: match.bbox.y1 } : null;
             }).filter(Boolean).sort((a, b) => a.x - b.x);
-            const correctOrder = anchors.every((a, index) => index === 0 ||
-                headerSpecs.findIndex(([id]) => id === anchors[index - 1].id)
-                    < headerSpecs.findIndex(([id]) => id === a.id));
-            if (anchors.length >= 6 && correctOrder) {
-                const top = Math.min(...anchors.map(a => a.top));
-                const typicalHeight = Math.max(10, Math.max(...anchors.map(a => a.bottom - a.top)));
-                // Include second-line headings ("Certificate No", "Year Marks"), exclude result row.
-                const headerWords = usable.filter(w => w.bbox.y0 >= top - typicalHeight &&
-                    w.bbox.y0 <= top + typicalHeight * 3.1);
-                const headerBottom = Math.max(...headerWords.map(w => w.bbox.y1),
-                    ...anchors.map(a => a.bottom)) + typicalHeight * 0.45;
-                const afterHeader = usable.filter(w => w.bbox.y0 > headerBottom);
-                if (afterHeader.length) {
-                    const rowStart = Math.min(...afterHeader.map(w => w.bbox.y0));
-                    // One record per screenshot; allow name/course to wrap across two lines.
-                    const rowWords = afterHeader.filter(w => w.bbox.y0 < rowStart + typicalHeight * 4.4);
+            const properlyOrdered = headerCandidates.every((h, index) => index === 0 ||
+                fields.findIndex(([id]) => id === headerCandidates[index - 1].id) < fields.findIndex(([id]) => id === h.id));
+            if (properlyOrdered && headerCandidates.length >= 6 &&
+                headerCandidates.some(h => h.id === 'diplomaPnr') &&
+                headerCandidates.some(h => h.id === 'diplomaResult')) {
+                const anchors = headerCandidates;
+                const fontHeight = Math.max(12, Math.min(30, anchors.map(a => a.bottom - a.top).sort((a, b) => a - b)[Math.floor(anchors.length / 2)] || 14));
+                const headerBottom = Math.max(...anchors.map(a => a.bottom)) + fontHeight * 0.8;
+                const rowCandidates = usable.filter(w => w.bbox.y0 > headerBottom &&
+                    !/^[-|]+$/.test(w.text.trim()));
+                if (rowCandidates.length) {
+                    const firstY = Math.min(...rowCandidates.map(w => w.bbox.y0));
+                    const rowWords = rowCandidates.filter(w => w.bbox.y0 < firstY + Math.max(50, fontHeight * 4.3));
                     const cells = Object.fromEntries(anchors.map(a => [a.id, []]));
-                    rowWords.forEach(word => {
-                        const x = (word.bbox.x0 + word.bbox.x1) / 2;
+                    for (const w of rowWords) {
+                        const x = (w.bbox.x0 + w.bbox.x1) / 2;
                         let nearest = anchors[0];
-                        for (const anchor of anchors) {
-                            if (Math.abs(anchor.x - x) < Math.abs(nearest.x - x)) nearest = anchor;
+                        for (const a of anchors) {
+                            if (Math.abs(a.x - x) < Math.abs(nearest.x - x)) nearest = a;
                         }
-                        cells[nearest.id].push(word);
-                    });
+                        cells[nearest.id].push(w);
+                    }
                     for (const [id, values] of Object.entries(cells)) {
-                        const text = values.sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0)
-                            .map(w => String(w.text).trim()).join(' ')
-                            .replace(/\s+([,)])/g, '$1').replace(/([,(])\s+/g, '$1').trim();
-                        if (text) found[id] = text;
+                        if (values.length) found[id] = sortColumnWords(values).map(w => w.text).join(' ');
                     }
                 }
             }
-            // Conservative fallback when table-position data isn't available:
-            // only use clearly labelled entries, never guess which year's marks belong to which column.
-            const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            // Plain-text backup supports individually labelled values, never guessing
+            // marks by their order in a flattened table.
             const labels = [
                 ['diplomaPnr', /^pnr[_\s-]*(?:no\.?|number)?\s*[:#-]\s*(.+)$/i],
                 ['diplomaCertificate', /^certificate\s*(?:no\.?|number)?\s*[:#-]\s*(.+)$/i],
@@ -770,24 +870,26 @@
                 ['diplomaThird', /^third\s*year\s*marks?\s*[:#-]\s*(.+)$/i],
                 ['diplomaResult', /^result\s*[:#-]\s*(.+)$/i]
             ];
-            for (const line of lines) {
-                for (const [id, expression] of labels) {
-                    const match = line.match(expression);
-                    if (match && !found[id]) found[id] = match[1].trim();
+            for (const line of String(text || '').split(/\r?\n/)) {
+                for (const [id, rx] of labels) {
+                    if (!found[id]) { const match = line.trim().match(rx); if (match) found[id] = match[1]; }
                 }
             }
-            // Reject obvious column headings rather than exporting them as student data.
-            const headingOnly = /^(?:no|name|mark|marks|year|student|course|certificate|result|first|second|third)$/i;
-            for (const [id] of DIPLOMA_FIELDS) {
-                const value = (found[id] || '').replace(/\s+/g, ' ').trim();
-                const plausible = value && !headingOnly.test(value) &&
-                    (!['diplomaFirst', 'diplomaSecond', 'diplomaThird'].includes(id) || /\d/.test(value));
-                document.getElementById(id).value = plausible ? value : '';
+            let filled = 0;
+            const missing = [];
+            for (const [id, label] of DIPLOMA_FIELDS) {
+                const value = cleanDiplomaValue(id, found[id]);
+                document.getElementById(id).value = value;
+                if (value) filled++;
+                else missing.push(label);
+            }
+            const pnr = document.getElementById('diplomaPnr').value;
+            const cert = document.getElementById('diplomaCertificate').value;
+            if (pnr && cert && pnr !== cert && (pnr.slice(1) === cert || cert.slice(1) === pnr)) {
+                warnings.push('PNR / Certificate first character recheck karein');
             }
             generateCardQR();
-            const filled = DIPLOMA_FIELDS.filter(([id]) => document.getElementById(id).value).length;
-            const missing = DIPLOMA_FIELDS.filter(([id]) => !document.getElementById(id).value).map(([, label]) => label);
-            return { filled, missing };
+            return { filled, missing, warnings };
         }
 
         function parseExtractedText(text, words = []) {
