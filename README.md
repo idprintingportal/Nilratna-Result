@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shiv Nirmal ITI - Smart Result & Clean Barcode Card Generator</title>
+    <title>Shiv Nirmal ITI and Institute of Technology - Smart Result & QR Generator</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- QR Code Library -->
@@ -24,6 +24,7 @@
         .result-table th, .result-table td { border: 1px solid #d1d5db; padding: 12px 14px; text-align: left; vertical-align: top; }
         .result-table th { background: #f1f5f9; color: #334155; font-weight: 700; }
         .result-table td { background: white; color: #475569; overflow-wrap: anywhere; }
+        .course-hidden { display: none !important; }
         /* Custom Styling for Movable and Resizable Barcode / QR Code Box */
         #qrMovableContainer {
             position: absolute;
@@ -94,7 +95,7 @@
         <div class="max-w-[96%] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-bold text-amber-400 flex items-center gap-2">
-                    ⚡ Shiv Nirmal ITI - Clean Image & Barcode Generator
+                    ⚡ Shiv Nirmal ITI and Institute of Technology
                 </h1>
                 <p class="text-xs text-slate-400">Upload background image, place movable/resizable QR Barcode on top, and download clean image</p>
             </div>
@@ -104,17 +105,18 @@
     <section id="scanResultPage" class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
             <div class="border-b border-slate-200 px-6 py-5 text-center">
-                <h1 class="text-2xl font-bold tracking-wide text-slate-800">Shiv Nirmal ITI</h1>
-                <p class="mt-1 text-sm text-slate-500">Student Result</p>
+                <h1 class="text-2xl font-bold tracking-wide text-slate-800">Shiv Nirmal ITI and Institute of Technology</h1>
+                <p id="scanResultType" class="mt-1 text-sm font-medium text-slate-500">Student Result</p>
+                <p class="mt-2 text-xs font-medium text-amber-700">User-entered/OCR-extracted data; not an officially verified result.</p>
             </div>
             <div class="overflow-x-auto">
-                <table class="result-table w-full min-w-[1050px] border-collapse text-sm">
-                    <thead><tr><th>Student Name</th><th>Seat No</th><th>Date Of Birth</th><th>Year</th><th>Trade</th><th>Practical Marks</th><th>Theory Marks</th><th>Workshop Calculation Science</th><th>Engineering Drawing</th><th>Social Study</th><th>Total Marks</th><th>OutOff Marks</th></tr></thead>
+                <table id="scanResultTable" class="result-table w-full min-w-[1050px] border-collapse text-sm">
+                    <thead><tr id="scanResultHead"><th>Student Name</th><th>Seat No</th><th>Date Of Birth</th><th>Year</th><th>Trade</th><th>Practical Marks</th><th>Theory Marks</th><th>Workshop Calculation Science</th><th>Engineering Drawing</th><th>Social Study</th><th>Total Marks</th><th>OutOff Marks</th></tr></thead>
                     <tbody><tr id="scanResultRow"></tr></tbody>
                 </table>
             </div>
         </div>
-        <p class="mt-5 text-center text-sm"><a id="officialResultLink" class="break-all font-semibold text-blue-700 underline hover:text-blue-900" target="_blank" rel="noopener noreferrer">Open Official Result</a></p>
+        <p id="resultLinkWrap" class="mt-5 text-center text-sm course-hidden"><a id="officialResultLink" class="break-all font-semibold text-blue-700 underline hover:text-blue-900" target="_blank" rel="noopener noreferrer">Open Reference Result Website (verify independently)</a></p>
     </section>
 
     <!-- Main Container -->
@@ -132,19 +134,23 @@
                 <p id="ocrStatus" class="text-[11px] text-amber-400 mt-1 font-semibold"></p>
             </div>
 
-            <!-- Basic Info Fields -->
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Base URL:</label>
-        <input type="text" id="baseUrl" value="https://nemrc.co.in/result.php" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 outline-none">
-                </div>
-                <div>
-                    <label class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Course:</label>
-                    <input type="text" id="courseVal" value="ITI" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 outline-none">
-                </div>
+            <!-- Keep ITI and Diploma data entirely separate. -->
+            <div>
+                <label for="courseVal" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Select Result Type:</label>
+                <select id="courseVal" onchange="setCourseMode(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-sm text-white outline-none">
+                    <option value="ITI">ITI</option>
+                    <option value="Diploma">Diploma</option>
+                </select>
+                <p class="mt-1 text-[11px] text-sky-300">Image upload par ITI / Diploma automatically detect hoga. Aap manually bhi select kar sakte hain.</p>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div id="itiFields" class="flex flex-col gap-3">
+                <div>
+                    <label for="baseUrl" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">ITI Result Base URL:</label>
+                    <input type="url" id="baseUrl" value="https://nemrc.co.in/result.php" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 outline-none">
+                </div>
+                <!-- Original ITI inputs remain intact. -->
+                <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Student Name:</label>
                     <input type="text" id="studentName" placeholder="e.g. Roshan Bistur sawara" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 outline-none">
@@ -211,9 +217,26 @@
                 </div>
             </div>
 
+            </div><!-- /itiFields -->
+
+            <div id="diplomaFields" class="course-hidden flex flex-col gap-3">
+                <p class="text-xs text-slate-300">Diploma result table ke 8 columns. OCR ke baad marks aur details verify karein.</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label for="diplomaPnr" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">PNR No:</label><input type="text" id="diplomaPnr" placeholder="e.g. A1900511" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaCertificate" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Certificate No:</label><input type="text" id="diplomaCertificate" placeholder="Certificate number" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaName" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Student Name:</label><input type="text" id="diplomaName" placeholder="Student name" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaCourse" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Course Name:</label><input type="text" id="diplomaCourse" placeholder="Diploma course" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaFirst" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">First Year Mark:</label><input type="text" id="diplomaFirst" placeholder="e.g. 497(64.12),474(61.16)" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaSecond" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Second Year Marks:</label><input type="text" id="diplomaSecond" placeholder="e.g. 490(65.33)" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaThird" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Third Year Mark:</label><input type="text" id="diplomaThird" placeholder="e.g. 470(67.14)" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                    <div><label for="diplomaResult" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Result:</label><input type="text" id="diplomaResult" placeholder="Pass / Fail / ATKT" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
+                </div>
+            </div><!-- /diplomaFields -->
+
             <button onclick="generateCardQR()" class="mt-2 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg shadow text-xs">
                 🚀 Generate Barcode / QR Code
             </button>
+            <p id="qrStatus" class="text-[11px] text-amber-300" role="status">Scan result is based on manually entered / OCR-extracted values, not official verification.</p>
         </section>
 
         <!-- Right Panel: Image Upload & Barcode Only Preview -->
@@ -350,70 +373,121 @@
             generateCardQR();
         }
 
-        function generateCardQR() {
-            const baseUrl = document.getElementById('baseUrl').value.trim();
-            const courseVal = document.getElementById('courseVal').value.trim();
-            const seatNo = document.getElementById('seatNo').value.trim() || "N/A";
-            const studentName = document.getElementById('studentName').value.trim() || "N/A";
-            const dob = document.getElementById('dob').value.trim() || "N/A";
-            const yearVal = document.getElementById('yearVal').value.trim() || "N/A";
-            const trade = document.getElementById('trade').value.trim() || "N/A";
-            const practical = document.getElementById('practical').value.trim() || "N/A";
-            const theory = document.getElementById('theory').value.trim() || "N/A";
-            const wcs = document.getElementById('wcs').value.trim() || "N/A";
-            const ed = document.getElementById('ed').value.trim() || "N/A";
-            const socialStudy = document.getElementById('socialStudy').value.trim() || "N/A";
-            const totalMarks = document.getElementById('totalMarks').value.trim() || "N/A";
-            const cutoff = document.getElementById('cutoff').value.trim() || "700";
+        const DIPLOMA_FIELDS = [
+            ['diplomaPnr', 'PNR No'], ['diplomaCertificate', 'Certificate No'],
+            ['diplomaName', 'Student Name'], ['diplomaCourse', 'Course Name'],
+            ['diplomaFirst', 'First Year Mark'], ['diplomaSecond', 'Second Year Marks'],
+            ['diplomaThird', 'Third Year Mark'], ['diplomaResult', 'Result']
+        ];
+        const ITI_RESULT_HEADERS = [
+            'Student Name', 'Seat No', 'Date Of Birth', 'Year', 'Trade',
+            'Practical Marks', 'Theory Marks', 'Workshop Calculation Science',
+            'Engineering Drawing', 'Social Study', 'Total Marks', 'OutOff Marks'
+        ];
 
-            let targetUrl;
-            try {
-                const resultUrl = new URL(baseUrl);
-                resultUrl.searchParams.set('course', courseVal);
-                resultUrl.searchParams.set('seat', seatNo);
-                targetUrl = resultUrl.toString();
-            } catch (error) {
-                console.error('Invalid result URL:', error);
-                alert('Base URL sahi nahi hai. Kripya valid URL daalein.');
-                return;
+        function setCourseMode(mode) {
+            const diploma = mode === 'Diploma';
+            document.getElementById('itiFields').classList.toggle('course-hidden', diploma);
+            document.getElementById('diplomaFields').classList.toggle('course-hidden', !diploma);
+            document.getElementById('ocrStatus').textContent = '';
+            generateCardQR();
+        }
+
+        function getDiplomaValues() {
+            return DIPLOMA_FIELDS.map(([id]) => document.getElementById(id).value.trim());
+        }
+
+        function generateCardQR() {
+            const diploma = document.getElementById('courseVal').value === 'Diploma';
+            const status = document.getElementById('qrStatus');
+            let resultData;
+            let offlineText;
+            if (diploma) {
+                const values = getDiplomaValues();
+                resultData = { mode: 'diploma', values };
+                offlineText = 'SHIV NIRMAL ITI AND INSTITUTE OF TECHNOLOGY\nDIPLOMA RESULT (UNVERIFIED)\n'
+                    + DIPLOMA_FIELDS.map((field, index) => `${field[1]}: ${values[index] || 'N/A'}`).join('\n');
+            } else {
+                const baseUrl = document.getElementById('baseUrl').value.trim();
+                const courseVal = document.getElementById('courseVal').value.trim();
+                const seatNo = document.getElementById('seatNo').value.trim() || 'N/A';
+                const studentName = document.getElementById('studentName').value.trim() || 'N/A';
+                const dob = document.getElementById('dob').value.trim() || 'N/A';
+                const yearVal = document.getElementById('yearVal').value.trim() || 'N/A';
+                const trade = document.getElementById('trade').value.trim() || 'N/A';
+                const practical = document.getElementById('practical').value.trim() || 'N/A';
+                const theory = document.getElementById('theory').value.trim() || 'N/A';
+                const wcs = document.getElementById('wcs').value.trim() || 'N/A';
+                const ed = document.getElementById('ed').value.trim() || 'N/A';
+                const socialStudy = document.getElementById('socialStudy').value.trim() || 'N/A';
+                const totalMarks = document.getElementById('totalMarks').value.trim() || 'N/A';
+                const cutoff = document.getElementById('cutoff').value.trim() || '700';
+                let targetUrl;
+                try {
+                    const resultUrl = new URL(baseUrl);
+                    if (!['https:', 'http:'].includes(resultUrl.protocol)) throw new Error('HTTP(S) required');
+                    resultUrl.searchParams.set('course', courseVal);
+                    resultUrl.searchParams.set('seat', seatNo);
+                    targetUrl = resultUrl.toString();
+                } catch (error) {
+                    console.error('Invalid result URL:', error);
+                    status.textContent = 'ITI Base URL sahi nahi hai. Valid HTTP(S) URL daalein.';
+                    return;
+                }
+                // Legacy ITI QR/result format stays compatible with previously scanned links.
+                resultData = {
+                    name: studentName, seat: seatNo, dob, year: yearVal, trade,
+                    practical, theory, wcs, ed, socialStudy, total: totalMarks, cutoff,
+                    officialUrl: targetUrl
+                };
+                offlineText = `SHIV NIRMAL ITI AND INSTITUTE OF TECHNOLOGY\nITI RESULT (UNVERIFIED)\nStudent Name: ${studentName}\nSeat No: ${seatNo}\nDOB: ${dob}\nYear: ${yearVal}\nTrade: ${trade}\nPractical: ${practical}\nTheory: ${theory}\nWorkshop Calc & Sci: ${wcs}\nEngineering Drawing: ${ed}\nSocial Study: ${socialStudy}\nTotal: ${totalMarks} / ${cutoff}\nReference Result: ${targetUrl}`;
             }
 
-            const resultData = {
-                name: studentName, seat: seatNo, dob, year: yearVal, trade,
-                practical, theory, wcs, ed, socialStudy, total: totalMarks, cutoff,
-                officialUrl: targetUrl
-            };
             let qrPayload;
-            if (location.protocol === 'http:' || location.protocol === 'https:') {
+            const hosted = location.protocol === 'https:' || location.protocol === 'http:';
+            if (hosted) {
                 const scanUrl = new URL(location.href);
                 scanUrl.search = '';
                 scanUrl.hash = '';
-                scanUrl.searchParams.set('result', JSON.stringify(resultData));
+                if (diploma) {
+                    // Positional array reduces QR data density; older ITI links are unaffected.
+                    scanUrl.searchParams.set('d', JSON.stringify(resultData.values));
+                } else {
+                    scanUrl.searchParams.set('result', JSON.stringify(resultData));
+                }
                 qrPayload = scanUrl.toString();
             } else {
-                // Local file previews cannot provide a shareable formatted result page.
-                qrPayload = `SHIV NIRMAL ITI\nStudent Name: ${studentName}\nSeat No: ${seatNo}\nDOB: ${dob}\nYear: ${yearVal}\nTrade: ${trade}\nPractical: ${practical}\nTheory: ${theory}\nWorkshop Calc & Sci: ${wcs}\nEngineering Drawing: ${ed}\nSocial Study: ${socialStudy}\nTotal: ${totalMarks} / ${cutoff}\nOfficial Result: ${targetUrl}`;
+                qrPayload = offlineText;
             }
-
             const canvas = document.getElementById('qrCanvas');
             if (!window.QRCode || typeof QRCode.toCanvas !== 'function') {
-                console.error('QR library is unavailable. Check the internet connection and reload.');
-                alert('QR library load nahi hui. Internet connection check karke page reload karein.');
+                status.textContent = 'QR library unavailable. Internet check karke page reload karein.';
                 return;
             }
-            // Clear earlier opaque pixels before drawing transparent light modules.
             const context = canvas.getContext('2d');
             context.clearRect(0, 0, canvas.width, canvas.height);
             QRCode.toCanvas(canvas, qrPayload, {
-                width: 300,
+                width: 480,
                 margin: 4,
+                errorCorrectionLevel: 'M',
                 color: { dark: qrColor === 'white' ? '#FFFFFFFF' : '#000000FF', light: '#00000000' }
             }, function (error) {
                 if (error) {
+                    status.textContent = 'QR generate nahi hua. Input data length check karein.';
                     console.error('QR Generation Error:', error);
-                    alert('QR code generate nahi hua. Input data check karke dobara try karein.');
+                    return;
                 }
+                status.textContent = hosted
+                    ? 'QR ready. Result is unverified; print par QR kam se kam 2.5 cm rakhein, scan test karein.'
+                    : 'Local HTML: QR me text hoga. Table-format QR result ke liye HTML ko website par host karein.';
             });
+        }
+
+        function getImageFilename() {
+            const diploma = document.getElementById('courseVal').value === 'Diploma';
+            const identifier = document.getElementById(diploma ? 'diplomaPnr' : 'seatNo').value;
+            const safeIdentifier = (identifier || 'Data').replace(/[^a-z0-9_-]/gi, '_').slice(0, 48);
+            return `Result_Barcode_${diploma ? 'Diploma' : 'ITI'}_${safeIdentifier}.png`;
         }
 
         // Export/Download Image with Barcode Overlay
@@ -432,11 +506,11 @@
                 }))
                 .then(blob => {
                     if (typeof saveAs === 'function') {
-                        saveAs(blob, `Result_Barcode_Image_${document.getElementById('seatNo').value || 'Data'}.png`);
+                        saveAs(blob, getImageFilename());
                     } else {
                         const link = document.createElement('a');
                         link.href = URL.createObjectURL(blob);
-                        link.download = `Result_Barcode_Image_${document.getElementById('seatNo').value || 'Data'}.png`;
+                        link.download = getImageFilename();
                         link.click();
                         URL.revokeObjectURL(link.href);
                     }
@@ -598,30 +672,224 @@
             else ocrStatus.textContent = 'Image file yahan drop karein.';
         });
 
-        function processImage(file) {
+        // Tesseract v5 recognizes text by default; request TSV explicitly for accurate table columns.
+        function parseOcrTsv(tsv) {
+            if (typeof tsv !== 'string') return [];
+            return tsv.split(/\r?\n/).slice(1).flatMap(row => {
+                const cells = row.split('\t');
+                if (cells.length < 12 || cells[0] !== '5') return [];
+                const [left, top, width, height, confidence] = [6, 7, 8, 9, 10].map(index => Number(cells[index]));
+                const value = cells.slice(11).join('\t').trim();
+                if (!value || ![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return [];
+                return [{
+                    text: value, confidence,
+                    bbox: { x0: left, y0: top, x1: left + width, y1: top + height },
+                    order: [1, 2, 3, 4, 5].map(index => Number(cells[index]) || 0)
+                }];
+            });
+        }
+
+        function detectResultType(text, words = []) {
+            const source = `${text || ''} ${words.map(word => word.text || '').join(' ')}`.toLowerCase();
+            const diplomaIndicators = [
+                /\bpnr[_\s-]*no\b/, /\bcertificate\s*(?:no|number)\b/,
+                /\bfirst\s+year\s+marks?\b/, /\bsecond\s+year\s+marks?\b/,
+                /\bthird\s+year\s+marks?\b/, /\bdiploma\s+in\b/
+            ];
+            const diplomaCount = diplomaIndicators.filter(pattern => pattern.test(source)).length;
+            if (diplomaCount >= 2 || (diplomaCount >= 1 && /\bcertificate\b/.test(source) && /\bresult\b/.test(source))) {
+                return 'Diploma';
+            }
+            const itiCount = [
+                /\bpractical\s*(?:marks)?\b/, /\btheory\s*(?:marks)?\b/,
+                /\bworkshop\s*(?:calculation|calc)/, /\bengineering\s+drawing\b/,
+                /\bseat\s*(?:no|number)\b/
+            ].filter(pattern => pattern.test(source)).length;
+            return itiCount >= 2 ? 'ITI' : null;
+        }
+
+        async function prepareOcrImage(file) {
+            // Small, pale screenshots otherwise lose characters such as the initial A in PNR.
+            const bitmap = await createImageBitmap(file);
+            try {
+                const scale = bitmap.width < 1800 ? Math.min(2, 2800 / bitmap.width, 2200 / bitmap.height) : 1;
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(bitmap.width * scale);
+                canvas.height = Math.round(bitmap.height * scale);
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                return canvas;
+            } finally {
+                if (bitmap.close) bitmap.close();
+            }
+        }
+
+        let ocrBusy = false;
+        async function processImage(file) {
             if (!file || !file.type.startsWith('image/')) {
                 ocrStatus.textContent = 'Kripya image file select karein.';
                 return;
             }
-            if (!window.Tesseract) {
-                ocrStatus.textContent = 'OCR library load nahi hui. Internet check karke page reload karein.';
+            if (!window.Tesseract || typeof Tesseract.createWorker !== 'function') {
+                ocrStatus.textContent = 'OCR library load nahi hui. Internet check karke reload karein.';
                 return;
             }
-            ocrStatus.textContent = '🔍 Image read ho rahi hai: 0%';
-            Tesseract.recognize(
-                file,
-                'eng',
-                { logger: m => {
-                    if (m.status === 'recognizing text') ocrStatus.textContent = `🔍 Image read ho rahi hai: ${Math.round((m.progress || 0) * 100)}%`;
-                } }
-            ).then(({ data }) => {
-                const result = parseExtractedText(data.text, data.words);
-                const missing = result.missing.length ? ` Check: ${result.missing.join(', ')}.` : '';
-                ocrStatus.textContent = `✅ ${result.filled} fields read; barcode ready.${missing}`;
-            }).catch(err => {
-                ocrStatus.textContent = '❌ Image read nahi hui. Saaf aur seedhi image try karein.';
-                console.error(err);
+            if (ocrBusy) {
+                ocrStatus.textContent = 'Ek image process ho rahi hai. Kripya wait karein.';
+                return;
+            }
+            ocrBusy = true;
+            ocrStatus.textContent = '🔍 OCR shuru ho raha hai...';
+            let worker;
+            try {
+                const prepared = await prepareOcrImage(file);
+                worker = await Tesseract.createWorker('eng', Tesseract.OEM?.DEFAULT ?? 1, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            ocrStatus.textContent = `🔍 OCR chal raha hai: ${Math.round((m.progress || 0) * 100)}%`;
+                        }
+                    }
+                });
+                // Position data is essential for separate table columns and wrapped cells.
+                const { data } = await worker.recognize(prepared, {}, { text: true, tsv: true });
+                const words = parseOcrTsv(data.tsv);
+                const detected = detectResultType(data.text, words);
+                if (detected && detected !== document.getElementById('courseVal').value) {
+                    document.getElementById('courseVal').value = detected;
+                    setCourseMode(detected);
+                }
+                const mode = document.getElementById('courseVal').value;
+                const result = mode === 'Diploma'
+                    ? parseDiplomaText(data.text, words)
+                    : parseExtractedText(data.text, words);
+                const extra = detected ? ` (${detected} auto-detected)` : ` (${mode} selected)`;
+                const missing = result.missing.length ? ` Check missing: ${result.missing.join(', ')}.` : '';
+                const warning = result.warnings?.length ? ` ⚠️ ${result.warnings.join('; ')}.` : '';
+                ocrStatus.textContent = `✅ OCR: ${result.filled} fields recognized${extra}. QR se pehle sabhi values verify karein.${missing}${warning}`;
+            } catch (error) {
+                console.error('OCR failure:', error);
+                ocrStatus.textContent = '❌ OCR failed. Clear screenshot ya dobara upload try karein.';
+            } finally {
+                ocrBusy = false;
+                if (worker) {
+                    try { await worker.terminate(); } catch (error) { console.warn('OCR worker cleanup:', error); }
+                }
+            }
+        }
+
+        function sortColumnWords(words) {
+            // Recognizer's line/word order respects the correct word sequence even
+            // if its bounding boxes have different vertical padding.
+            return words.sort((a, b) => {
+                if (a.order && b.order) {
+                    for (let index = 0; index < 5; index++) {
+                        if (a.order[index] !== b.order[index]) return a.order[index] - b.order[index];
+                    }
+                }
+                return a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0;
             });
+        }
+
+        function cleanDiplomaValue(id, raw) {
+            let value = String(raw || '').replace(/\s+/g, ' ').trim();
+            if (!value) return '';
+            if (['diplomaPnr', 'diplomaCertificate'].includes(id)) {
+                value = value.replace(/\s/g, '').replace(/[^A-Za-z0-9/-]/g, '');
+                return /^[A-Z0-9][A-Z0-9/-]{3,30}$/i.test(value) ? value.toUpperCase() : '';
+            }
+            if (['diplomaFirst', 'diplomaSecond', 'diplomaThird'].includes(id)) {
+                // Keep commas, decimals and parentheses in original marks format.
+                value = value.replace(/\s*([(),])\s*/g, '$1');
+                return /^\d{1,5}\s*\(\d{1,3}(?:\.\d{1,3})?\)(?:,\d{1,5}\s*\(\d{1,3}(?:\.\d{1,3})?\))*$/.test(value) ? value : '';
+            }
+            if (id === 'diplomaResult') {
+                const result = value.match(/^(pass|fail|atkt|absent|withheld|pending)$/i);
+                return result ? result[0].toUpperCase() === 'PASS' ? 'Pass' : result[0].toUpperCase() : '';
+            }
+            if (/^(?:no|name|mark|marks|year|student|course|certificate|result|first|second|third)$/i.test(value)) return '';
+            if (id === 'diplomaName' && /\b(?:course|year|mark|certificate|pnr|result)\b/i.test(value)) return '';
+            if (id === 'diplomaCourse' && !/\b(?:diploma|engineering|technology|polytechnic|electrical|mechanical|civil|computer|electronics)\b/i.test(value)) return '';
+            return value.slice(0, 250);
+        }
+
+        function parseDiplomaText(text, words = []) {
+            const found = {};
+            const warnings = [];
+            const usable = words.filter(w => w && w.bbox && Number.isFinite(w.bbox.x0) && String(w.text || '').trim());
+            const fields = [
+                ['diplomaPnr', /^(pnr|pnrno)$/i], ['diplomaCertificate', /^certificate$/i],
+                ['diplomaName', /^student$/i], ['diplomaCourse', /^course$/i],
+                ['diplomaFirst', /^first$/i], ['diplomaSecond', /^second$/i],
+                ['diplomaThird', /^third$/i], ['diplomaResult', /^result$/i]
+            ];
+            const normalize = item => String(item.text || '').replace(/[^a-z]/gi, '').toLowerCase();
+            const headerCandidates = fields.map(([id, pattern]) => {
+                const matches = usable.filter(w => pattern.test(normalize(w)));
+                const match = matches.sort((a, b) => a.bbox.y0 - b.bbox.y0)[0];
+                return match ? { id, x: (match.bbox.x0 + match.bbox.x1) / 2, top: match.bbox.y0, bottom: match.bbox.y1 } : null;
+            }).filter(Boolean).sort((a, b) => a.x - b.x);
+            const properlyOrdered = headerCandidates.every((h, index) => index === 0 ||
+                fields.findIndex(([id]) => id === headerCandidates[index - 1].id) < fields.findIndex(([id]) => id === h.id));
+            if (properlyOrdered && headerCandidates.length >= 6 &&
+                headerCandidates.some(h => h.id === 'diplomaPnr') &&
+                headerCandidates.some(h => h.id === 'diplomaResult')) {
+                const anchors = headerCandidates;
+                const fontHeight = Math.max(12, Math.min(30, anchors.map(a => a.bottom - a.top).sort((a, b) => a - b)[Math.floor(anchors.length / 2)] || 14));
+                const headerBottom = Math.max(...anchors.map(a => a.bottom)) + fontHeight * 0.8;
+                const rowCandidates = usable.filter(w => w.bbox.y0 > headerBottom &&
+                    !/^[-|]+$/.test(w.text.trim()));
+                if (rowCandidates.length) {
+                    const firstY = Math.min(...rowCandidates.map(w => w.bbox.y0));
+                    const rowWords = rowCandidates.filter(w => w.bbox.y0 < firstY + Math.max(50, fontHeight * 4.3));
+                    const cells = Object.fromEntries(anchors.map(a => [a.id, []]));
+                    for (const w of rowWords) {
+                        const x = (w.bbox.x0 + w.bbox.x1) / 2;
+                        let nearest = anchors[0];
+                        for (const a of anchors) {
+                            if (Math.abs(a.x - x) < Math.abs(nearest.x - x)) nearest = a;
+                        }
+                        cells[nearest.id].push(w);
+                    }
+                    for (const [id, values] of Object.entries(cells)) {
+                        if (values.length) found[id] = sortColumnWords(values).map(w => w.text).join(' ');
+                    }
+                }
+            }
+            // Plain-text backup supports individually labelled values, never guessing
+            // marks by their order in a flattened table.
+            const labels = [
+                ['diplomaPnr', /^pnr[_\s-]*(?:no\.?|number)?\s*[:#-]\s*(.+)$/i],
+                ['diplomaCertificate', /^certificate\s*(?:no\.?|number)?\s*[:#-]\s*(.+)$/i],
+                ['diplomaName', /^student\s*name\s*[:#-]\s*(.+)$/i],
+                ['diplomaCourse', /^course\s*name\s*[:#-]\s*(.+)$/i],
+                ['diplomaFirst', /^first\s*year\s*marks?\s*[:#-]\s*(.+)$/i],
+                ['diplomaSecond', /^second\s*year\s*marks?\s*[:#-]\s*(.+)$/i],
+                ['diplomaThird', /^third\s*year\s*marks?\s*[:#-]\s*(.+)$/i],
+                ['diplomaResult', /^result\s*[:#-]\s*(.+)$/i]
+            ];
+            for (const line of String(text || '').split(/\r?\n/)) {
+                for (const [id, rx] of labels) {
+                    if (!found[id]) { const match = line.trim().match(rx); if (match) found[id] = match[1]; }
+                }
+            }
+            let filled = 0;
+            const missing = [];
+            for (const [id, label] of DIPLOMA_FIELDS) {
+                const value = cleanDiplomaValue(id, found[id]);
+                document.getElementById(id).value = value;
+                if (value) filled++;
+                else missing.push(label);
+            }
+            const pnr = document.getElementById('diplomaPnr').value;
+            const cert = document.getElementById('diplomaCertificate').value;
+            if (pnr && cert && pnr !== cert && (pnr.slice(1) === cert || cert.slice(1) === pnr)) {
+                warnings.push('PNR / Certificate first character recheck karein');
+            }
+            generateCardQR();
+            return { filled, missing, warnings };
         }
 
         function parseExtractedText(text, words = []) {
@@ -708,24 +976,50 @@
         }
 
         function showScanResultIfRequested() {
-            const raw = new URLSearchParams(location.search).get('result');
-            if (!raw) return;
+            const params = new URLSearchParams(location.search);
+            const diplomaRaw = params.get('d');
+            const legacyRaw = params.get('result');
+            if (diplomaRaw === null && legacyRaw === null) return;
             try {
-                const data = JSON.parse(raw);
-                const values = [data.name, data.seat, data.dob, data.year, data.trade,
-                    data.practical, data.theory, data.wcs, data.ed, data.socialStudy,
-                    data.total, data.cutoff];
-                const row = document.getElementById('scanResultRow');
-                row.replaceChildren(...values.map(value => {
+                let values;
+                let headers;
+                const diploma = diplomaRaw !== null;
+                let referenceUrl = '';
+                if (diploma) {
+                    values = JSON.parse(diplomaRaw);
+                    if (!Array.isArray(values) || values.length !== DIPLOMA_FIELDS.length ||
+                        values.some(value => typeof value !== 'string' || value.length > 500)) {
+                        throw new Error('Invalid diploma result');
+                    }
+                    headers = DIPLOMA_FIELDS.map(([, label]) => label);
+                } else {
+                    const data = JSON.parse(legacyRaw);
+                    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid ITI result');
+                    values = [data.name, data.seat, data.dob, data.year, data.trade,
+                        data.practical, data.theory, data.wcs, data.ed, data.socialStudy,
+                        data.total, data.cutoff];
+                    headers = ITI_RESULT_HEADERS;
+                    if (typeof data.officialUrl === 'string') {
+                        const url = new URL(data.officialUrl);
+                        if (['https:', 'http:'].includes(url.protocol)) referenceUrl = url.href;
+                    }
+                }
+                document.getElementById('scanResultHead').replaceChildren(...headers.map(label => {
+                    const th = document.createElement('th');
+                    th.textContent = label;
+                    return th;
+                }));
+                document.getElementById('scanResultRow').replaceChildren(...values.map(value => {
                     const cell = document.createElement('td');
-                    cell.textContent = value ?? '';
+                    cell.textContent = value == null || value === '' ? '—' : String(value);
                     return cell;
                 }));
-                const officialUrl = new URL(data.officialUrl);
-                if (!['https:', 'http:'].includes(officialUrl.protocol)) throw new Error('Invalid official URL');
-                document.getElementById('officialResultLink').href = officialUrl.href;
+                document.getElementById('scanResultType').textContent = diploma ? 'Diploma Student Result' : 'ITI Student Result';
+                document.getElementById('scanResultTable').style.minWidth = diploma ? '1000px' : '1050px';
+                if (referenceUrl) document.getElementById('officialResultLink').href = referenceUrl;
+                document.getElementById('resultLinkWrap').classList.toggle('course-hidden', !referenceUrl);
                 document.body.classList.add('result-view');
-                document.title = 'Student Result - Shiv Nirmal ITI';
+                document.title = `${diploma ? 'Diploma' : 'ITI'} Student Result - Shiv Nirmal ITI and Institute of Technology`;
             } catch (error) {
                 console.error('Could not display scan result:', error);
                 document.body.classList.add('result-view');
@@ -733,10 +1027,10 @@
             }
         }
 
-        // Initialize result or QR view on load.
         window.onload = function() {
             showScanResultIfRequested();
-            if (!new URLSearchParams(location.search).has('result')) generateCardQR();
+            const params = new URLSearchParams(location.search);
+            if (!params.has('result') && !params.has('d')) generateCardQR();
         };
     </script>
 </body>
