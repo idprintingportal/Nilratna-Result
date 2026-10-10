@@ -107,7 +107,6 @@
             <div class="border-b border-slate-200 px-6 py-5 text-center">
                 <h1 class="text-2xl font-bold tracking-wide text-slate-800">Shiv Nirmal ITI and Institute of Technology</h1>
                 <p id="scanResultType" class="mt-1 text-sm font-medium text-slate-500">Student Result</p>
-                <p class="mt-2 text-xs font-medium text-amber-700">User-entered/OCR-extracted data; not an officially verified result.</p>
             </div>
             <div class="overflow-x-auto">
                 <table id="scanResultTable" class="result-table w-full min-w-[1050px] border-collapse text-sm">
@@ -116,7 +115,7 @@
                 </table>
             </div>
         </div>
-        <p id="resultLinkWrap" class="mt-5 text-center text-sm course-hidden"><a id="officialResultLink" class="break-all font-semibold text-blue-700 underline hover:text-blue-900" target="_blank" rel="noopener noreferrer">Open Reference Result Website (verify independently)</a></p>
+        <p id="resultLinkWrap" class="mt-5 text-center text-sm course-hidden"><a id="officialResultLink" class="break-all font-semibold text-blue-700 underline hover:text-blue-900" target="_blank" rel="noopener noreferrer">View Official Website Result</a></p>
     </section>
 
     <!-- Main Container -->
@@ -221,6 +220,11 @@
 
             <div id="diplomaFields" class="course-hidden flex flex-col gap-3">
                 <p class="text-xs text-slate-300">Diploma result table ke 8 columns. OCR ke baad marks aur details verify karein.</p>
+                <div>
+                    <label for="diplomaBaseUrl" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Diploma Result Website URL:</label>
+                    <input type="url" id="diplomaBaseUrl" value="https://nemrc.co.in/result.php" placeholder="https://example.org/result.php" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 outline-none">
+                    <p class="mt-1 text-[10px] text-slate-400">ITI ki existing result website default hai. Diploma ka official result page alag ho to yahan sahi URL daalein.</p>
+                </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div><label for="diplomaPnr" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">PNR No:</label><input type="text" id="diplomaPnr" placeholder="e.g. A1900511" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
                     <div><label for="diplomaCertificate" class="block text-[11px] font-bold text-slate-300 uppercase mb-1">Certificate No:</label><input type="text" id="diplomaCertificate" placeholder="Certificate number" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200"></div>
@@ -397,6 +401,17 @@
             return DIPLOMA_FIELDS.map(([id]) => document.getElementById(id).value.trim());
         }
 
+        // Match the existing ITI result-link pattern. If Diploma uses a different
+        // official site or URL format, the website URL can be updated above.
+        const DEFAULT_DIPLOMA_RESULT_BASE = 'https://nemrc.co.in/result.php';
+        function getDiplomaResultUrl(baseUrl, pnr) {
+            const resultUrl = new URL(baseUrl);
+            if (!['https:', 'http:'].includes(resultUrl.protocol)) throw new Error('Invalid result site URL');
+            resultUrl.searchParams.set('course', 'Diploma');
+            resultUrl.searchParams.set('seat', pnr || 'N/A');
+            return resultUrl.href;
+        }
+
         function generateCardQR() {
             const diploma = document.getElementById('courseVal').value === 'Diploma';
             const status = document.getElementById('qrStatus');
@@ -404,9 +419,18 @@
             let offlineText;
             if (diploma) {
                 const values = getDiplomaValues();
-                resultData = { mode: 'diploma', values };
+                let targetUrl;
+                try {
+                    targetUrl = getDiplomaResultUrl(document.getElementById('diplomaBaseUrl').value.trim(), values[0]);
+                } catch (error) {
+                    console.error('Invalid Diploma result site URL:', error);
+                    status.textContent = 'Diploma Result Website URL sahi nahi hai. Valid HTTP(S) URL daalein.';
+                    return;
+                }
+                resultData = { mode: 'diploma', values, officialUrl: targetUrl };
                 offlineText = 'SHIV NIRMAL ITI AND INSTITUTE OF TECHNOLOGY\nDIPLOMA RESULT (UNVERIFIED)\n'
-                    + DIPLOMA_FIELDS.map((field, index) => `${field[1]}: ${values[index] || 'N/A'}`).join('\n');
+                    + DIPLOMA_FIELDS.map((field, index) => `${field[1]}: ${values[index] || 'N/A'}`).join('\n')
+                    + `\nResult Website: ${targetUrl}`;
             } else {
                 const baseUrl = document.getElementById('baseUrl').value.trim();
                 const courseVal = document.getElementById('courseVal').value.trim();
@@ -450,8 +474,13 @@
                 scanUrl.search = '';
                 scanUrl.hash = '';
                 if (diploma) {
-                    // Positional array reduces QR data density; older ITI links are unaffected.
+                    // Existing ?d= array format remains compatible with old Diploma QR links.
                     scanUrl.searchParams.set('d', JSON.stringify(resultData.values));
+                    // Only store a separate URL for a custom website, to keep the QR compact.
+                    const defaultUrl = getDiplomaResultUrl(DEFAULT_DIPLOMA_RESULT_BASE, resultData.values[0]);
+                    if (resultData.officialUrl !== defaultUrl) {
+                        scanUrl.searchParams.set('du', resultData.officialUrl);
+                    }
                 } else {
                     scanUrl.searchParams.set('result', JSON.stringify(resultData));
                 }
@@ -992,6 +1021,11 @@
                         throw new Error('Invalid diploma result');
                     }
                     headers = DIPLOMA_FIELDS.map(([, label]) => label);
+                    // Old Diploma QR payloads contain only ?d=. Use the existing
+                    // result-site address as a fallback so they also get the link.
+                    const customSiteUrl = params.get('du');
+                    const url = new URL(customSiteUrl || getDiplomaResultUrl(DEFAULT_DIPLOMA_RESULT_BASE, values[0]));
+                    if (['https:', 'http:'].includes(url.protocol)) referenceUrl = url.href;
                 } else {
                     const data = JSON.parse(legacyRaw);
                     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid ITI result');
